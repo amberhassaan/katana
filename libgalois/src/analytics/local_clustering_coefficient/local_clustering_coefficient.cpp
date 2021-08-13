@@ -167,10 +167,14 @@ struct LocalClusteringCoefficientPerThread {
     const uint64_t num_nodes = graph.size();
     const uint32_t num_threads = katana::getActiveThreads();
 
+    // allocate num_nodes * num_threads long array and divide it among threads
     TriangleCountVec all_thread_count_vec;
     all_thread_count_vec.allocateBlocked(num_nodes * num_threads);
 
     katana::PerThreadStorage<IterPair> per_thread_node_triangle_count;
+    katana::ParallelSTL::fill(
+        per_thread_node_triangle_count.begin(),
+        per_thread_node_triangle_count.end(), uint32_t{0});
 
     katana::on_each([&](const unsigned tid, const unsigned numT) {
       *per_thread_node_triangle_count.getLocal() = katana::block_range(
