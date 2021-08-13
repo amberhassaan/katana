@@ -33,8 +33,9 @@ struct Node2VecAlgo {
   using NodeData = std::tuple<>;
   using EdgeData = std::tuple<>;
 
-  using SortedGraphView =  katana::TypedPropertyGraphView<SortedPropertyGraphView, NodeData, EdgeData>;
-  using GNode =  typename SortedGraphView::Node;
+  using SortedGraphView = katana::TypedPropertyGraphView<
+      SortedPropertyGraphView, NodeData, EdgeData>;
+  using GNode = typename SortedGraphView::Node;
 
   const RandomWalksPlan& plan_;
   Node2VecAlgo(const RandomWalksPlan& plan) : plan_(plan) {}
@@ -53,7 +54,8 @@ struct Node2VecAlgo {
   }
 
   void GraphRandomWalk(
-      const SortedGraphView& graph, katana::InsertBag<std::vector<uint32_t>>* walks,
+      const SortedGraphView& graph,
+      katana::InsertBag<std::vector<uint32_t>>* walks,
       const katana::NUMAArray<uint64_t>& degree) {
     katana::PerThreadStorage<std::mt19937> generator;
     katana::PerThreadStorage<std::uniform_real_distribution<double>*>
@@ -138,8 +140,7 @@ struct Node2VecAlgo {
                   alpha = prob_backward;
                 }  //check if nbr is also a neighbor of the previous node on this walk
                 else if (
-                    katana::FindEdgeSortedByDest(graph, prev, nbr) !=
-                    graph.edge_end(prev)) {
+                    graph.find_edge(prev, nbr) != graph.edges(prev).end()) {
                   alpha = 1.0;
                 } else {
                   alpha = prob_forward;
@@ -165,7 +166,8 @@ struct Node2VecAlgo {
   }
 
   void operator()(
-      const SortedGraphView& graph, katana::InsertBag<std::vector<uint32_t>>* walks,
+      const SortedGraphView& graph,
+      katana::InsertBag<std::vector<uint32_t>>* walks,
       const katana::NUMAArray<uint64_t>& degree) {
     GraphRandomWalk(graph, walks, degree);
   }
@@ -177,8 +179,9 @@ struct Edge2VecAlgo {
   using NodeData = std::tuple<>;
   using EdgeData = std::tuple<EdgeType>;
 
-  using SortedGraphView = katana::TypedPropertyGraphView<SortedPropertyGraphView, NodeData, EdgeData>;
-  using GNode = typename SortedGraphView::Node ;
+  using SortedGraphView = katana::TypedPropertyGraphView<
+      SortedPropertyGraphView, NodeData, EdgeData>;
+  using GNode = typename SortedGraphView::Node;
 
   const RandomWalksPlan& plan_;
   Edge2VecAlgo(const RandomWalksPlan& plan) : plan_(plan) {}
@@ -211,10 +214,10 @@ struct Edge2VecAlgo {
   }
 
   void GraphRandomWalk(
-      const SortedGraphView& graph, katana::InsertBag<std::vector<uint32_t>>* walks,
+      const SortedGraphView& graph,
+      katana::InsertBag<std::vector<uint32_t>>* walks,
       katana::InsertBag<std::vector<uint32_t>>* types_walks,
       const katana::NUMAArray<uint64_t>& degree) {
-
     katana::PerThreadStorage<std::mt19937> generator;
     katana::PerThreadStorage<std::uniform_real_distribution<double>*>
         distribution;
@@ -296,9 +299,7 @@ struct Edge2VecAlgo {
               if (nbr == prev) {
                 alpha = prob_backward;
               }  //check if nbr is also a neighbor of the previous node on this walk
-              else if (
-                  katana::FindEdgeSortedByDest(graph, prev, nbr) !=
-                  graph.edge_end(prev)) {
+              else if (graph.find_edge(prev, nbr) != graph.edges(prev).end()) {
                 alpha = 1.0;
               } else {
                 alpha = prob_forward;
@@ -439,7 +440,8 @@ struct Edge2VecAlgo {
   }
 
   void operator()(
-      const SortedGraphView& graph, katana::InsertBag<std::vector<uint32_t>>* walks,
+      const SortedGraphView& graph,
+      katana::InsertBag<std::vector<uint32_t>>* walks,
       const katana::NUMAArray<uint64_t>& degree) {
     uint32_t iterations = plan_.max_iterations();
 
@@ -480,12 +482,9 @@ InitializeDegrees(const Graph& graph, katana::NUMAArray<uint64_t>* degree) {
 
 template <typename Algorithm>
 static katana::Result<std::vector<std::vector<uint32_t>>>
-RandomWalksWithWrap(const typename Algorithm::SortedGraphView& graph, RandomWalksPlan plan) {
+RandomWalksWithWrap(
+    const typename Algorithm::SortedGraphView& graph, RandomWalksPlan plan) {
   katana::ReportPageAllocGuard page_alloc;
-
-  if (auto res = katana::SortAllEdgesByDest(pg); !res) {
-    return res.error();
-  }
 
   Algorithm algo(plan);
 
@@ -509,12 +508,14 @@ katana::Result<std::vector<std::vector<uint32_t>>>
 katana::analytics::RandomWalks(PropertyGraph* pg, RandomWalksPlan plan) {
   switch (plan.algorithm()) {
   case RandomWalksPlan::kNode2Vec: {
-    auto graph = KATANA_CHECKED(Node2VecAlgo::SortedGraphView::Make(pg, {}, {}));
+    auto graph =
+        KATANA_CHECKED(Node2VecAlgo::SortedGraphView::Make(pg, {}, {}));
     return RandomWalksWithWrap<Node2VecAlgo>(graph, plan);
   }
   case RandomWalksPlan::kEdge2Vec: {
-    katana::TemporaryPropertyGuard tmp_edge_prop{pg};
-    auto graph = KATANA_CHECKED(Edge2VecAlgo::SortedGraphView::Make(pg, {}, {tmp_edge_prop.name()}));
+    TemporaryPropertyGuard tmp_edge_prop{pg};
+    auto graph = KATANA_CHECKED(
+        Edge2VecAlgo::SortedGraphView::Make(pg, {}, {tmp_edge_prop.name()}));
     return RandomWalksWithWrap<Edge2VecAlgo>(graph, plan);
   }
   default:

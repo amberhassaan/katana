@@ -35,8 +35,8 @@ using Node = SortedGraphView::Node;
 using Edge = SortedGraphView::Edge;
 
 katana::Result<std::unique_ptr<katana::PropertyGraph>>
-SubGraphNodeSet(const SortedGraphView& graph, const std::vector<Node>& node_set) {
-
+SubGraphNodeSet(
+    const SortedGraphView& graph, const std::vector<Node>& node_set) {
   uint64_t num_nodes = node_set.size();
   // Subgraph topology : out indices
   katana::NUMAArray<Edge> out_indices;
@@ -54,18 +54,19 @@ SubGraphNodeSet(const SortedGraphView& graph, const std::vector<Node>& node_set)
         for (Node m = 0; m < num_nodes; ++m) {
           auto dest = node_set[m];
           // Binary search on the edges sorted by destination id
-          for (auto edge_it = graph.find_edge(src, dest); 
-              edge_it != last && graph.edge_dest(*edge_it) == dest; ++edge_it) {
+          for (auto edge_it = graph.find_edge(src, dest);
+               edge_it != last && graph.edge_dest(*edge_it) == dest;
+               ++edge_it) {
             subgraph_edges[n].push_back(m);
           }
         }
         out_indices[n] = subgraph_edges[n].size();
       },
-      katana::steal(),
-      katana::loopname("SubgraphExtraction"));
+      katana::steal(), katana::loopname("SubgraphExtraction"));
 
   // Prefix sum
-  katana::ParallelSTL::partial_sum(out_indices.begin(), out_indices.end(), out_indices.begin());
+  katana::ParallelSTL::partial_sum(
+      out_indices.begin(), out_indices.end(), out_indices.begin());
   uint64_t num_edges = out_indices[num_nodes - 1];
 
   // Subgraph topology : out dests
@@ -95,7 +96,6 @@ katana::Result<std::unique_ptr<katana::PropertyGraph>>
 katana::analytics::SubGraphExtraction(
     katana::PropertyGraph* pg, const std::vector<Node>& node_vec,
     SubGraphExtractionPlan plan) {
-
   // Remove duplicates from the node vector
   std::unordered_set<uint32_t> set;
   std::vector<uint32_t> dedup_node_vec;

@@ -23,7 +23,8 @@
 
 using namespace katana::analytics;
 
-using SortedGraphView = katana::PropertyGraphViews::NodesSortedByDegreeEdgesSortedByDestID;
+using SortedGraphView =
+    katana::PropertyGraphViews::NodesSortedByDegreeEdgesSortedByDestID;
 using Node = SortedGraphView::Node;
 using edge_iterator = SortedGraphView::edge_iterator;
 
@@ -88,9 +89,7 @@ struct LessThan {
   const G& g;
   typename G::Node n;
   LessThan(const G& g, typename G::Node n) : g(g), n(n) {}
-  bool operator()(typename G::edge_iterator it) {
-    return g.edge_destst(*it) < n;
-  }
+  bool operator()(typename G::edge_iterator it) { return g.edge_dest(*it) < n; }
 };
 
 template <typename G>
@@ -124,6 +123,8 @@ NodeIteratingAlgo(const SortedGraphView* graph) {
       [&](const Node& n) {
         // Partition neighbors
         // [first, ea) [n] [bb, last)
+        edge_iterator first = graph->edges(n).begin();
+        edge_iterator last = graph->edges(n).end();
         edge_iterator ea =
             LowerBound(first, last, LessThan<SortedGraphView>(*graph, n));
         edge_iterator bb = LowerBound(
@@ -154,7 +155,8 @@ NodeIteratingAlgo(const SortedGraphView* graph) {
  */
 void
 OrderedCountFunc(
-    const SortedGraphView* graph, Node n, katana::GAccumulator<size_t>& numTriangles) {
+    const SortedGraphView* graph, Node n,
+    katana::GAccumulator<size_t>& numTriangles) {
   size_t numTriangles_local = 0;
   for (auto edges_n : graph->edges(n)) {
     Node v = graph->edge_dest(edges_n);
