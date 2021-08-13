@@ -139,8 +139,7 @@ struct Node2VecAlgo {
                 if (nbr == prev) {
                   alpha = prob_backward;
                 }  //check if nbr is also a neighbor of the previous node on this walk
-                else if (
-                    graph.find_edge(prev, nbr) != graph.edges(prev).end()) {
+                else if (graph.has_edge(prev, nbr)) {
                   alpha = 1.0;
                 } else {
                   alpha = prob_forward;
@@ -299,7 +298,7 @@ struct Edge2VecAlgo {
               if (nbr == prev) {
                 alpha = prob_backward;
               }  //check if nbr is also a neighbor of the previous node on this walk
-              else if (graph.find_edge(prev, nbr) != graph.edges(prev).end()) {
+              else if (graph.has_edge(prev, nbr)) {
                 alpha = 1.0;
               } else {
                 alpha = prob_forward;
