@@ -23,14 +23,14 @@
 #include <arrow/type_traits.h>
 
 #include "katana/ArrowVisitor.h"
-#include "katana/Galois.h"
+#include "katana/SharedMemSys.h"
 #include "katana/JSON.h"
 #include "katana/Logging.h"
 #include "katana/OfflineGraph.h"
 #include "llvm/Support/CommandLine.h"
-#include "tsuba/Errors.h"
-#include "tsuba/FaultTest.h"
-#include "tsuba/FileView.h"
+#include "katana/ErrorCode.h"
+#include "katana/FaultTest.h"
+#include "katana/FileView.h"
 
 namespace cll = llvm::cl;
 static cll::opt<std::string> inputfilename(
@@ -145,7 +145,7 @@ using FullReportMap = std::unordered_map<
 
 struct ArrayVisitor : public katana::ArrowVisitor {
   using ResultType = katana::Result<std::tuple<WithoutGrouping, WithGrouping, OptimizedGrouping>>;
-  using AcceptTypes = std::tuple<katana::AcceptAllFlatTypes>;
+  using AcceptTypes = std::tuple<katana::AcceptAllArrowTypes>;
 
   template <typename ArrowType, typename ArrayType>
   arrow::enable_if_null<ArrowType, ResultType> Call(const ArrayType& prop_arr) {
@@ -215,6 +215,15 @@ struct ArrayVisitor : public katana::ArrowVisitor {
     return std::make_tuple(without_grouping, with_grouping, opt_grouping);
 
   }
+
+  
+  template <typename ArrowType, typename ArrayType>
+  arrow::enable_if_struct<ArrowType, ResultType> Call(const Array& prop_arr) {
+    return KATANA_ERROR(
+        katana::ErrorCode::ArrowError, "Type not supported yet {}",
+        prop_arr.type()->ToString());
+  }
+  
 
   ResultType AcceptFailed(const arrow::Array& prop_arr) {
     return KATANA_ERROR(
@@ -303,7 +312,7 @@ void AddMetaDataStat(PropertyStatMap& mem_usage_stats,
 void 
 GatherTopologyStats(const katana::PropertyGraph* graph, PropertyStatMap& mem_usage_stats) noexcept {
 
-  fmt::print("Graph has {} Nodes and {} Edges\n", graph->num_nodes(), graph->num_edges());
+  fmt::print("Graph has {} Nodes and {} Edges\n", graph->NumNodes(), graph->NumEdges());
   
   // Adj Indices
   AddMetaDataStat(
@@ -311,7 +320,7 @@ GatherTopologyStats(const katana::PropertyGraph* graph, PropertyStatMap& mem_usa
       PropertyName{"adj_indices"},
       TypeName{"uint64_t"},
       GraphElement::kNode,
-      MetaDataSize{graph->num_nodes() * sizeof(katana::GraphTopology::Edge)});
+      MetaDataSize{graph->NumNodes() * sizeof(katana::GraphTopology::Edge)});
 
   // Edge Destinations
   AddMetaDataStat(
@@ -319,7 +328,7 @@ GatherTopologyStats(const katana::PropertyGraph* graph, PropertyStatMap& mem_usa
       PropertyName{"edge_dests"},
       TypeName{"uint32_t"},
       GraphElement::kEdge,
-      MetaDataSize{graph->num_edges() * sizeof(katana::GraphTopology::Edge)});
+      MetaDataSize{graph->NumEdges() * sizeof(katana::GraphTopology::Edge)});
 
 
   // Node type info
@@ -328,7 +337,7 @@ GatherTopologyStats(const katana::PropertyGraph* graph, PropertyStatMap& mem_usa
       PropertyName{"node_type_ids"},
       TypeName{"uint8_t"},
       GraphElement::kNode,
-      MetaDataSize{graph->num_nodes() * sizeof(katana::EntityTypeID)});
+      MetaDataSize{graph->NumNodes() * sizeof(katana::EntityTypeID)});
 
   // Edge type info
   AddMetaDataStat(
@@ -336,7 +345,7 @@ GatherTopologyStats(const katana::PropertyGraph* graph, PropertyStatMap& mem_usa
       PropertyName{"edge_type_ids"},
       TypeName{"uint8_t"},
       GraphElement::kEdge,
-      MetaDataSize{graph->num_edges() * sizeof(katana::EntityTypeID)});
+      MetaDataSize{graph->NumEdges() * sizeof(katana::EntityTypeID)});
 
 }
 
@@ -425,14 +434,14 @@ SaveToJson(
   std::string serialized(json_to_dump.value());
   serialized = serialized + "\n";
 
-  auto ff = std::make_unique<tsuba::FileFrame>();
+  auto ff = std::make_unique<katana::FileFrame>();
   if (auto res = ff->Init(serialized.size()); !res) {
     return res.error();
   }
 
   if (auto res = ff->Write(serialized.data(), serialized.size()); !res.ok()) {
     return KATANA_ERROR(
-        tsuba::ArrowToTsuba(res.code()), "arrow error: {}", res);
+        katana::ArrowToTsuba(res.code()), "arrow error: {}", res);
   }
 
   myfile.open(path_to_save);
@@ -445,7 +454,7 @@ SaveToJson(
 void
 doMemoryAnalysis(const katana::PropertyGraph* graph) {
 
-  fmt::print("Num Nodes = {}, Num Edges = {}\n", graph->num_nodes(), graph->num_edges());
+  fmt::print("Num Nodes = {}, Num Edges = {}\n", graph->NumNodes(), graph->NumEdges());
 
 
   FullReportMap mem_map = {};
@@ -468,8 +477,8 @@ doMemoryAnalysis(const katana::PropertyGraph* graph) {
       std::pair("Number-Node-Entity-Types", graph->GetNumNodeEntityTypes()));
   basic_raw_stats.insert(
       std::pair("Number-Edge-Entity-Types", graph->GetNumNodeEntityTypes()));
-  basic_raw_stats.insert(std::pair("Number-Nodes", graph->num_nodes()));
-  basic_raw_stats.insert(std::pair("Number-Edges", graph->num_edges()));
+  basic_raw_stats.insert(std::pair("Number-Nodes", graph->NumNodes()));
+  basic_raw_stats.insert(std::pair("Number-Edges", graph->NumEdges()));
 
   auto atomic_node_types = graph->ListAtomicNodeTypes();
   auto atomic_edge_types = graph->ListAtomicEdgeTypes();
@@ -569,9 +578,9 @@ doMemoryAnalysis(const katana::PropertyGraph* graph) {
 
 uint64_t GetNumPartitions(const std::string& rdg_dir) {
 
-  auto rdg_view_res = tsuba::ListViewsOfVersion(rdg_dir);
+  auto rdg_view_res = katana::ListViewsOfVersion(rdg_dir);
   KATANA_LOG_ASSERT(rdg_view_res);
-  std::vector<tsuba::RDGView> views = rdg_view_res.value().second;
+  std::vector<katana::RDGView> views = rdg_view_res.value().second;
   KATANA_LOG_ASSERT(views.size() > 0);
 
   return views[0].num_partitions;
@@ -580,7 +589,7 @@ uint64_t GetNumPartitions(const std::string& rdg_dir) {
 
 int
 main(int argc, char** argv) {
-  katana::SharedMemSys sys;
+  katana::SharedMemSys S;
   llvm::cl::ParseCommandLineOptions(argc, argv);
 
 
@@ -590,7 +599,7 @@ main(int argc, char** argv) {
   PropertyStatMap mem_usage_stats;
 
   for (uint32_t part_id = 0; part_id < num_part; ++part_id) {
-    auto pg_res = katana::PropertyGraph::Make(inputfilename, tsuba::RDGLoadOptions{.partition_id_to_load = part_id});
+    auto pg_res = katana::PropertyGraph::Make(inputfilename, katana::RDGLoadOptions{.partition_id_to_load = part_id});
     KATANA_LOG_ASSERT(pg_res);
     std::unique_ptr<katana::PropertyGraph> pg(std::move(pg_res.value()));
 
